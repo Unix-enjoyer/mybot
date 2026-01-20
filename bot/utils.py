@@ -49,7 +49,9 @@ def split_long_message(text: str, max_length: int = None) -> List[str]:
     return parts
 
 
-def get_user_metadata(user: User) -> dict:
+# Найдите функцию get_user_metadata и исправьте её:
+
+def get_user_metadata(user) -> dict:
     """Получение метаданных пользователя (синхронная версия)"""
     return {
         "username": user.username or "",
@@ -57,11 +59,12 @@ def get_user_metadata(user: User) -> dict:
         "first_name": user.first_name or "",
         "last_name": user.last_name or "",
         "language_code": user.language_code or "",
-        "is_premium": getattr(user, 'is_premium', False),
-        "is_bot": user.is_bot,
+        "is_premium": bool(getattr(user, 'is_premium', False)),  # Преобразуем в boolean
+        "is_bot": bool(user.is_bot),  # Преобразуем в boolean
         "link": f"tg://user?id={user.id}",
         "bio": "",
-        "additional_profile_info": ""
+        "additional_profile_info": "",
+        "profile_photo_file_id": ""  # Добавляем поле по ТЗ
     }
 
 

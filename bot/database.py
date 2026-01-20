@@ -132,6 +132,8 @@ class AtomicOperations:
             return False
 
 
+
+
 class CardManager:
     """Управление карточками заявок"""
 

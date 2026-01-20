@@ -42,7 +42,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def city_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обработка выбора города (асинхронная версия)"""
+    """Обработка выбора города"""
     query = update.callback_query
     await query.answer()
 
@@ -52,14 +52,15 @@ async def city_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Получаем метаданные пользователя
     user_meta = get_user_metadata(user)
 
-    # Пробуем получить bio через getChat (если доступно)
+    # Получаем bio через getChat если доступно
     try:
         chat = await context.bot.get_chat(user.id)
         if chat.bio:
             user_meta["bio"] = chat.bio
             user_meta["additional_profile_info"] = chat.bio
     except Exception as e:
-        logger.debug(f"Не удалось получить bio для пользователя {user.id}: {e}")
+        # Если не удалось получить bio, оставляем пустым
+        pass
 
     # Создаем карточку
     card = CardManager.create_card(user_meta, user.id, city)
