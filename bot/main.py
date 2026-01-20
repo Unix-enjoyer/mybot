@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from telegram import Update
 from telegram.ext import (
@@ -23,20 +24,18 @@ from .handlers import (
 
 def setup_logging():
     """Настройка логирования с RotatingFileHandler"""
-    # Формат логов
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Создаем логгер
     logger = logging.getLogger()
     logger.setLevel(getattr(logging, Config.LOG_LEVEL))
 
-    # 1. info.log - основной лог
+    # info.log
     info_handler = RotatingFileHandler(
         Config.LOGS_DIR / "info.log",
-        maxBytes=10 * 1024 * 1024,  # 10 MB
+        maxBytes=10 * 1024 * 1024,
         backupCount=5,
         encoding='utf-8'
     )
@@ -44,7 +43,7 @@ def setup_logging():
     info_handler.setFormatter(formatter)
     logger.addHandler(info_handler)
 
-    # 2. errors.log - ошибки
+    # errors.log
     error_handler_file = RotatingFileHandler(
         Config.LOGS_DIR / "errors.log",
         maxBytes=10 * 1024 * 1024,
@@ -55,7 +54,7 @@ def setup_logging():
     error_handler_file.setFormatter(formatter)
     logger.addHandler(error_handler_file)
 
-    # 3. Консольный вывод для разработки
+    # Console
     if Config.DEBUG:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
@@ -65,34 +64,31 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 
-async def main():
-    """Основная функция запуска бота (асинхронная)"""
+def main():
+    """Основная функция запуска бота (синхронная)"""
     print(f"\n{'=' * 60}")
     print(f"ЗАПУСК БОТА С python-telegram-bot 20.7")
-    print(f"Python: {Config.PYTHON_VERSION if hasattr(Config, 'PYTHON_VERSION') else 'Unknown'}")
     print(f"Режим: {'РАЗРАБОТКИ' if Config.DEBUG else 'ПРОДАКШЕНА'}")
     print(f"Директория данных: {Config.DATA_DIR}")
     print(f"{'=' * 60}\n")
 
     # Проверка конфигурации
     if not check_config():
-        print("\n❌ Пожалуйста, исправьте ошибки в конфигурации и перезапустите бота")
-        print("   Проверьте файл .env и наличие BOT_TOKEN")
-        return
+        print("\n❌ Ошибки конфигурации. Проверьте .env файл")
+        return 1
 
     # Настройка логирования
     logger = setup_logging()
     logger.info("Бот запускается...")
 
     try:
-        # Создаем Application (асинхронная версия)
+        # Создаем Application
         application = Application.builder().token(Config.BOT_TOKEN).build()
-        logger.info("Application создан успешно")
+        logger.info("Application создан")
     except Exception as e:
-        logger.error(f"Ошибка создания Application: {e}", exc_info=True)
+        logger.error(f"Ошибка создания бота: {e}")
         print(f"\n❌ Ошибка создания бота: {e}")
-        print("   Проверьте BOT_TOKEN в файле .env")
-        return
+        return 1
 
     # ConversationHandler для регистрации
     conv_handler = ConversationHandler(
@@ -103,22 +99,15 @@ async def main():
             ENTERING_EXTRA: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_extra)]
         },
         fallbacks=[CommandHandler('start', start_command)],
+        per_message=False,  # Явно указываем
     )
 
-    # Регистрируем все обработчики
     try:
-        # Обработчик регистрации
+        # Регистрируем все обработчики
         application.add_handler(conv_handler)
-
-        # Обработчики сообщений после регистрации
         application.add_handler(
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND,
-                handle_user_message
-            )
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_message)
         )
-
-        # Обработчики медиа после регистрации
         application.add_handler(
             MessageHandler(
                 filters.PHOTO | filters.Document.ALL | filters.VOICE | filters.VIDEO | filters.AUDIO,
@@ -126,7 +115,7 @@ async def main():
             )
         )
 
-        # Админ команды (ТОЛЬКО в группе модерации)
+        # Админ команды
         application.add_handler(CommandHandler('info', admin_info))
         application.add_handler(CommandHandler('msg', admin_msg))
         application.add_handler(CommandHandler('approve', admin_approve))
@@ -140,9 +129,9 @@ async def main():
         logger.info("Все обработчики зарегистрированы")
 
     except Exception as e:
-        logger.error(f"Ошибка регистрации обработчиков: {e}", exc_info=True)
+        logger.error(f"Ошибка регистрации обработчиков: {e}")
         print(f"\n❌ Ошибка настройки обработчиков: {e}")
-        return
+        return 1
 
     # Запуск бота
     try:
@@ -156,7 +145,7 @@ async def main():
             print(f"   Группа модерации: {Config.MODERATION_CHAT_ID}")
             print(f"   Директория данных: {Config.DATA_DIR}")
             print(f"\n   Папки проверены:")
-            print(f"     ✓ data/ существует: {(Config.BASE_DIR / 'data').exists()}")
+            print(f"     ✓ data/ существует: {Config.DATA_DIR.exists()}")
             print(f"     ✓ cards/ существует: {Config.CARDS_DIR.exists()}")
             print(f"     ✓ logs/ существует: {Config.LOGS_DIR.exists()}")
             print(f"     ✓ tmp/ существует: {Config.TMP_DIR.exists()}")
@@ -166,8 +155,8 @@ async def main():
             print("   2. Проверить логи в папке data/logs/")
             print("   3. Для остановки нажмите Ctrl+C\n")
 
-        # Запускаем бота в режиме polling
-        await application.run_polling()
+        # ЗАПУСКАЕМ БОТА - СИНХРОННО
+        application.run_polling()
 
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем")
@@ -175,8 +164,10 @@ async def main():
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}", exc_info=True)
         print(f"\n❌ Критическая ошибка: {e}")
+        return 1
+
+    return 0
 
 
 if __name__ == '__main__':
-    # Запускаем асинхронную функцию
-    asyncio.run(main())
+    sys.exit(main())
