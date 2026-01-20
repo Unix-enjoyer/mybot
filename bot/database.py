@@ -132,8 +132,6 @@ class AtomicOperations:
             return False
 
 
-
-
 class CardManager:
     """Управление карточками заявок"""
 
@@ -245,4 +243,70 @@ class CardManager:
 
         except Exception as e:
             logger.error(f"Ошибка получения карточек: {e}")
+            return []
+
+    @staticmethod
+    def format_for_list(card: dict) -> str:
+        """Форматирование карточки для списка"""
+        fio = card.get('fio', 'Нет ФИО')
+        if not fio or fio == "":
+            fio = "Нет ФИО"
+        return f"{card['number']} {fio} ({card['status']})"
+
+    @staticmethod
+    def format_detailed(card: dict) -> str:
+        """Детальное форматирование карточки для команды /info"""
+        lines = [
+            f"Заявка: {card['number']}",
+            f"Город: {card['city']}",
+            f"ФИО: {card.get('fio', 'Не указано')}",
+            f"Статус: {card['status']}",
+            f"Решение: {card['decision']}",
+            f"Extra: {card.get('extra', 'Не указано')}",
+            "",
+            "Метаданные пользователя:",
+            f"  user_id: {card['account_meta'].get('user_id', 'Нет')}",
+            f"  username: @{card['account_meta'].get('username', 'нет')}",
+            f"  Имя: {card['account_meta'].get('first_name', '')}",
+            f"  Фамилия: {card['account_meta'].get('last_name', '')}",
+            f"  Bio: {card['account_meta'].get('bio', 'Нет')}",
+            "",
+            f"Всего записей в истории: {len(card.get('history', []))}"
+        ]
+
+        # Добавляем последние записи истории
+        history = card.get('history', [])
+        if history:
+            lines.append("\nПоследние события:")
+            for entry in history[-5:]:  # Последние 5 записей
+                ts = entry['ts'][:19].replace('T', ' ')
+                text = entry['text'][:50] + "..." if len(entry['text']) > 50 else entry['text']
+                lines.append(f"  {ts} [{entry['source']}] {entry['type']}: {text}")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def get_cards_by_city(city: str) -> list:
+        """Получение карточек по городу"""
+        cards = []
+
+        try:
+            import os
+            for filename in os.listdir(Config.CARDS_DIR):
+                if filename.endswith('.json'):
+                    try:
+                        card_number = filename.replace('.json', '')
+                        card = CardManager.load_card(card_number)
+                        if card and card.get("city") == city:
+                            cards.append(card)
+                    except Exception as e:
+                        print(f"Ошибка чтения {filename}: {e}")
+                        continue
+
+            # Сортировка по номеру
+            cards.sort(key=lambda x: x["id"])
+            return cards
+
+        except Exception as e:
+            print(f"Ошибка получения карточек: {e}")
             return []

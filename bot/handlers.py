@@ -42,7 +42,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def city_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обработка выбора города"""
+    """Обработка выбора города с получением фото профиля"""
     query = update.callback_query
     await query.answer()
 
@@ -52,15 +52,25 @@ async def city_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Получаем метаданные пользователя
     user_meta = get_user_metadata(user)
 
-    # Получаем bio через getChat если доступно
+    # Пробуем получить bio через getChat
     try:
         chat = await context.bot.get_chat(user.id)
         if chat.bio:
             user_meta["bio"] = chat.bio
             user_meta["additional_profile_info"] = chat.bio
     except Exception as e:
-        # Если не удалось получить bio, оставляем пустым
-        pass
+        logger.debug(f"Не удалось получить bio для пользователя {user.id}: {e}")
+
+    # ПОЛУЧАЕМ ФОТО ПРОФИЛЯ (по ТЗ)
+    try:
+        photos = await context.bot.get_user_profile_photos(user.id, limit=1)
+        if photos.total_count > 0:
+            # Берем фото с наивысшим разрешением (последнее в массиве)
+            photo = photos.photos[0][-1]
+            user_meta["profile_photo_file_id"] = photo.file_id
+            logger.debug(f"Получено фото профиля для {user.id}: {photo.file_id[:20]}...")
+    except Exception as e:
+        logger.debug(f"Не удалось получить фото профиля для {user.id}: {e}")
 
     # Создаем карточку
     card = CardManager.create_card(user_meta, user.id, city)
@@ -69,7 +79,7 @@ async def city_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await query.edit_message_text("Ошибка создания заявки. Попробуйте снова /start")
         return ConversationHandler.END
 
-    # Сохраняем сессию пользователя
+    # Сохраняем сессию
     user_sessions[user.id] = {
         "card_number": card["number"],
         "city": city,
@@ -270,12 +280,23 @@ async def handle_user_media(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 
 async def send_to_moderation_group(card: dict, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправка заявки в группу модерации (асинхронная версия)"""
+    """Отправка заявки в группу модерации С ФОТО ПРОФИЛЯ по ТЗ"""
     try:
-        # Форматируем сообщение
+        # 1. ОТПРАВЛЯЕМ ФОТО ПРОФИЛЯ ЕСЛИ ЕСТЬ (по ТЗ)
+        photo_file_id = card['account_meta'].get('profile_photo_file_id')
+        if photo_file_id:
+            try:
+                await context.bot.send_photo(
+                    chat_id=Config.MODERATION_CHAT_ID,
+                    photo=photo_file_id,
+                    caption=f"[{card['number']}] Фото профиля"  # Префикс по ТЗ
+                )
+            except Exception as e:
+                logger.error(f"Ошибка отправки фото профиля: {e}")
+
+        # 2. Отправляем текстовое сообщение
         message = format_card_for_moderation(card)
 
-        # Разделяем на части если длинное
         for part in split_long_message(message):
             await context.bot.send_message(
                 chat_id=Config.MODERATION_CHAT_ID,
